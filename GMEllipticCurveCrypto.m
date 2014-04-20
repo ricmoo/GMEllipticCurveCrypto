@@ -32,8 +32,6 @@
 
 #import "GMEllipticCurveCrypto.h"
 
-#import <CommonCrypto/CommonDigest.h>
-
 /** Easy ecc - Relevant parts of ecc.c
  *
  *  The original easy-ecc code was left as untouched as possible:
@@ -1383,7 +1381,7 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
         case 48: case 49:
             return GMEllipticCurveSecp384r1;
     }
-    return 0;
+    return GMEllipticCurveNone;
 }
 
 
@@ -1466,8 +1464,7 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 - (BOOL)generateNewKeyPair {
     uint8_t l_public[_bytes + 1];
     uint8_t l_private[_bytes];
-    
-    
+        
     ecc_make_key(l_public, l_private, _numDigits, _curve_p, _curve_n, _curve_Gx, _curve_Gy);
     
     _publicKey = [NSData dataWithBytes:l_public length:_bytes + 1];
@@ -1479,23 +1476,20 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 
 - (NSData*)sharedSecretForPublicKey: (NSData*)otherPublicKey {
     if (!_privateKey) {
-        NSLog(@"Cannot create shared secret: missing private key");
-        return nil;
+        [NSException raise:@"Missing Key" format:@"Cannot create shared secret without a private key"];
     }
     
     // Prepare the private key
     uint8_t l_private[_bytes];
     if ([_privateKey length] != _bytes) {
-        NSLog(@"Invalid private key");
-        return nil;
+        [NSException raise:@"Invalid Key" format:@"Private key %@ is invalid", _privateKey];
     }
     [_privateKey getBytes:&l_private length:[_privateKey length]];
 
     // Prepare the public key
     uint8_t l_other_public[_bytes + 1];
     if ([otherPublicKey length] != _bytes + 1) {
-        NSLog(@"Invalid public key");
-        return NO;
+        [NSException raise:@"Invalid Key" format:@"Public key %@ is invalid", otherPublicKey];
     }
     [otherPublicKey getBytes:&l_other_public length:[otherPublicKey length]];
 
@@ -1509,25 +1503,27 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 }
 
 
+- (NSData*)sharedSecretForPublicKeyBase64: (NSString*)otherPublicKeyBase64 {
+    return [self sharedSecretForPublicKey:[[NSData alloc] initWithBase64EncodedString:otherPublicKeyBase64 options:0]];
+}
+
+
 - (NSData*)signatureForHash:(NSData *)hash {
     if (!_privateKey) {
-        NSLog(@"Cannot sign hash: missing private key");
-        return nil;
+        [NSException raise:@"Missing Key" format:@"Cannot sign a hash without a private key"];
     }
 
     // Prepare the private key
     uint8_t l_private[_bytes];
     if ([_privateKey length] != _bytes) {
-        NSLog(@"Invalid private key");
-        return nil;
+        [NSException raise:@"Invalid Key" format:@"Private key %@ is invalid", _privateKey];
     }
     [_privateKey getBytes:&l_private length:[_privateKey length]];
     
     // Prepare the hash
     uint8_t l_hash[_bytes];
     if ([hash length] != _bytes) {
-        //NSLog(@"Invalid hash: %d %d", [hash length], _bytes);
-        return nil;
+        [NSException raise:@"Invalid hash" format:@"Signing requires a hash the same length as the curve"];
     }
     [hash getBytes:&l_hash length:[hash length]];
     
@@ -1542,64 +1538,33 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 
 
 - (BOOL)verifySignature:(NSData *)signature forHash:(NSData *)hash {
-    //NSLog(@"Hash: %@", hash);
     if (!_publicKey) {
-        NSLog(@"Cannot verify signature: missing public key");
-        return NO;
+        [NSException raise:@"Missing Key" format:@"Cannot verify signature without a public key"];
     }
 
     // Prepare the signature
     uint8_t l_signature[2 * _bytes];
     if ([signature length] != 2 * _bytes) {
-        NSLog(@"Invalid signature key");
-        return NO;
+        [NSException raise:@"Invalid signature" format:@"Signature must be twice the length of its curve"];
     }
     [signature getBytes:&l_signature length:[signature length]];
 
     // Prepare the public key
     uint8_t l_public[_bytes + 1];
     if ([_publicKey length] != _bytes + 1) {
-        NSLog(@"Invalid public key");
-        return NO;
+        [NSException raise:@"Invalid Key" format:@"Public key %@ is invalid", _publicKey];
     }
     [_publicKey getBytes:&l_public length:[_publicKey length]];
 
     // Prepare the hash
     uint8_t l_hash[_bytes];
     if ([hash length] != _bytes) {
-        NSLog(@"Invalid hash key");
-        return NO;
+        [NSException raise:@"Invalid hash" format:@"Verifying requires a hash the same length as the curve"];
     }
     [hash getBytes:&l_hash length:[hash length]];
 
     // Check the signature
     return ecdsa_verify(l_public, l_hash, l_signature, _numDigits, _curve_p, _curve_b, _curve_n, _curve_Gx, _curve_Gy);
-}
-
-
-- (BOOL)hashAndVerifySignature:(NSData *)signature forData:(NSData *)data {
-    if (_bytes <= CC_SHA256_DIGEST_LENGTH) {
-        unsigned char hash[CC_SHA256_DIGEST_LENGTH];
-        CC_SHA256([data bytes], (int)[data length], hash);
-        return [self verifySignature:signature forHash:[NSData dataWithBytes:hash length:_bytes]];
-    }
-    
-    unsigned char hash[CC_SHA384_DIGEST_LENGTH];
-    CC_SHA384([data bytes], (int)[data length], hash);
-    return [self verifySignature:signature forHash:[NSData dataWithBytes:hash length:CC_SHA384_DIGEST_LENGTH]];
-}
-
-
-- (NSData*)hashAndSignData:(NSData *)data {
-    if (_bytes <= CC_SHA256_DIGEST_LENGTH) {
-        unsigned char hash[CC_SHA256_DIGEST_LENGTH];
-        CC_SHA256([data bytes], (int)[data length], hash);
-        return [self signatureForHash:[NSData dataWithBytes:hash length:_bytes]];
-    }
-
-    unsigned char hash[CC_SHA384_DIGEST_LENGTH];
-    CC_SHA384([data bytes], (int)[data length], hash);
-    return [self signatureForHash:[NSData dataWithBytes:hash length:CC_SHA384_DIGEST_LENGTH]];
 }
 
 
@@ -1623,8 +1588,18 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 }
 
 
+- (void)setPrivateKey: (NSData*)privateKey {
+    int keyBits = [GMEllipticCurveCrypto curveForKey:privateKey];
+    if (keyBits != _bits) {
+      [NSException raise:@"Invalid Key" format:@"Private key %@ is %d bits; curve is %d bits", privateKey, keyBits, _bits];
+    }
+    
+    _privateKey = privateKey;
+}
+
+
 - (void)setPrivateKeyBase64:(NSString *)privateKeyBase64 {
-    _privateKey = [[NSData alloc] initWithBase64EncodedString:privateKeyBase64 options:0];
+    [self setPrivateKey:[[NSData alloc] initWithBase64EncodedString:privateKeyBase64 options:0]];
 }
 
 
@@ -1633,8 +1608,18 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 }
 
 
+- (void)setPublicKey: (NSData*)publicKey {
+    int keyBits = [GMEllipticCurveCrypto curveForKey:publicKey];
+    if (keyBits != _bits) {
+      [NSException raise:@"Invalid Key" format:@"Public key %@ is %d bits; curve is %d bits", publicKey, keyBits, _bits];
+    }
+
+    _publicKey = publicKey;
+}
+
+
 - (void)setPublicKeyBase64:(NSString *)publicKeyBase64 {
-    _publicKey = [[NSData alloc] initWithBase64EncodedString:publicKeyBase64 options:0];
+    [self setPublicKey:[[NSData alloc] initWithBase64EncodedString:publicKeyBase64 options:0]];
 }
 
 

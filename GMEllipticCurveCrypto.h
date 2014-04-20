@@ -103,32 +103,12 @@ typedef enum GMEllipticCurve {
 
 @property (nonatomic, readonly) int sharedSecretLength;
 - (NSData*)sharedSecretForPublicKey: (NSData*)otherPublicKey;
+- (NSData*)sharedSecretForPublicKeyBase64: (NSString*)otherPublicKeyBase64;
 
 @property (nonatomic, readonly) int hashLength;
 - (NSData*)signatureForHash: (NSData*)hash;
 
 @property (nonatomic, readonly) int signatureLength;
 - (BOOL)verifySignature: (NSData*)signature forHash: (NSData*)hash;
-
-
-/**
- *  These methods will automatically hash the data using a hash function the generates
- *  a hash of the appropriate length for a given curve.
- *
- *    GMEllipticCurveSecp128r1 - SHA256
- *    GMEllipticCurveSecp192r1 - SHA256
- *    GMEllipticCurveSecp256r1 - SHA256
- *    GMEllipticCurveSecp384r1 - SHA384
- *
- *  Note: In some cases (ie. 128 and 192) the hash function (SHA256) generates a hash that
- *        is too large for signing, in which case the hash is truncated.
- *
- *  Note: These functions are quazi-experimental, and overly not-necessaryily-standard, so
- *        may change in the future. Likely to sha256HashAndSignData: and whatnot; and/or
- *        possibly moved to a category.
- */
-
-- (NSData*)hashAndSignData: (NSData*)data;
-- (BOOL)hashAndVerifySignature: (NSData*)signature forData: (NSData*)data;
 
 @end

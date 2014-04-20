@@ -46,7 +46,7 @@ NSLog(@"Public Key: base64=%@, rawBinary=%@", crypto.publicKeyBase64, crypto.pub
 
 The signing operations require a message the same length as the curve; so generally, a hash algorithm is used to fix the original message's length.
 
-Signatures using ECDSA will be twice the curve size. So, the 192 bit curve will produce a signature that is 48 bytes long.
+Signatures using ECDSA will be twice the curve size. So, the 192 bit curve will produce a signature that is 48 bytes (384 bits) long.
 
 Also note that the signature is intentionally different each time because ECDSA uses a random _k_ value.
 
@@ -76,7 +76,7 @@ NSLog(@"Valid Signature: %@", (valid ? @"YES": @"NO"));
 
 ### Shared secret
 
-Shared secrets using ECDH are the same length as the curve. So, the 192 bit curve will produce a shared secret that is 24 bytes long.
+Shared secrets using ECDH are the same length as the curve. So, the 192 bit curve will produce a shared secret that is 24 bytes (192 bits) long.
 
 ```objective-c
 NSString *alicePublicKey = @"A9N+XWIjLCYAwa8Hb7T6Rohttqo91CF8HQ==";
@@ -100,7 +100,7 @@ bob.privateKeyBase64 = bobPrivateKey;
 NSData *bobSharedSecret = [bob sharedSecretForPublicKeyBase64:alicePublicKey];
 NSLog(@"Shared Secret Bob: %@", bobSharedSecret);
 
-// And now both parties have the same secret!o
+// And now both parties have the same secret!
 NSLog(@"Shared secrets equal? %d", [aliceSharedSecret isEqualToData:bobSharedSecret]);
 
 ```
@@ -117,17 +117,20 @@ NSLog(@"Shared secrets equal? %d", [aliceSharedSecret isEqualToData:bobSharedSec
 
 ### Automatically hash and compute the signature for a message
 
-These should be considered experimental and will likely be moved to a category in a future version.
+Include the `GMEllipticCurveCrypto+hash.h` category to hash data automatically before hashing and verifying. The hash algorithm used must be at least the length of the curve. The hash will have the right-hand bytes truncated, if necessary.
 
 ```objective-c
-- (NSData*)hashAndSignData: (NSData*)data;
-- (BOOL)hashAndVerifySignature: (NSData*)signature forData: (NSData*)data;
+- (NSData*)hashSHA256AndSignData: (NSData*)data;
+- (BOOL)hashSHA256AndVerifySignature: (NSData*)signature forData: (NSData*)data;
+
+- (NSData*)hashSHA384AndSignData: (NSData*)data;
+- (BOOL)hashSHA384AndVerifySignature: (NSData*)signature forData: (NSData*)data;
 ```
 
 Why?
 ----
 
-Kenneth MacKay's easy-ecc is a simple-to-use implementation of essential Elliptic Curve Cryptographic functions, however, the curve used is specified as a compile-time constant, so it cannot be changed at runtime.
+Kenneth MacKay's easy-ecc is an awesome, simple-to-use implementation of essential Elliptic Curve Cryptographic functions, however, the curve used is specified as a compile-time constant, so it cannot be changed at runtime.
 
 This library allows any and as many different curves to be used at once.
 
