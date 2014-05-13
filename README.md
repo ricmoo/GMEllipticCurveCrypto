@@ -117,7 +117,7 @@ NSLog(@"Shared secrets equal? %d", [aliceSharedSecret isEqualToData:bobSharedSec
 
 ### Automatically hash and compute the signature for a message
 
-Include the `GMEllipticCurveCrypto+hash.h` category to hash data automatically before signing and verifying. The hash algorithm used must be at least the length of the curve. The hash will have the right-hand bytes truncated, if necessary.
+Include the `GMEllipticCurveCrypto+hash.h` category to hash data automatically before signing and verifying. The hash algorithm used must be at least the length of the curve. The hash will have the right-most bytes truncated, if necessary.
 
 ```objective-c
 - (NSData*)hashSHA256AndSignData: (NSData*)data;

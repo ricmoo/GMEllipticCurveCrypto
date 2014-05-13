@@ -1465,12 +1465,12 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
     uint8_t l_public[_bytes + 1];
     uint8_t l_private[_bytes];
         
-    ecc_make_key(l_public, l_private, _numDigits, _curve_p, _curve_n, _curve_Gx, _curve_Gy);
+    BOOL success = ecc_make_key(l_public, l_private, _numDigits, _curve_p, _curve_n, _curve_Gx, _curve_Gy);
     
     _publicKey = [NSData dataWithBytes:l_public length:_bytes + 1];
     _privateKey = [NSData dataWithBytes:l_private length:_bytes];
     
-    return YES;
+    return success;
 }
 
 
