@@ -34,64 +34,135 @@
 
 #import <CommonCrypto/CommonDigest.h>
 
-NSData *derEncodeSignature(NSData* signature) {
-    NSInteger length = [signature length];
-    
-    if (length % 2) {
-        return nil;
-    }
+NSData *derEncodeInteger(NSData *value) {
+    int length = [value length];
+    const unsigned char *data = [value bytes];
 
-    int keySize = length / 2;
+    int outputIndex = 0;
+    unsigned char output[[value length] + 3];
 
-    const unsigned char *data = [signature bytes];
+    output[outputIndex++] = 0x02;
 
-    // Construct the DER encoded structure    
-    unsigned char bytes[2 * keySize + 8];
+    // Find the first non-zero entry in value
+    int start = 0;
+    while (start < length && data[start] == 0){ start++; }
 
-    bytes[0] = 0x30;                  // type tag - sequence
-    // bytes[1] will be filled in later
-    bytes[2] = 0x02;                  // type tag - integer
-
-    int index = 3;
-
-    // Ensure the r value is encoded as positive
-    if (data[0] >= 0x80) {
-        bytes[index++] = 1 + keySize;       // length
-        bytes[index++] = 0x00;
+    // Add the length and zero padding to preserve sign
+    if (start == length || data[start] >= 0x80) {
+        output[outputIndex++] = length - start + 1;
+        output[outputIndex++] = 0x00;
     } else {
-        bytes[index++] = keySize;           // length
+        output[outputIndex++] = length - start;
     }
 
-    // encode the r value
-    [signature getBytes:&bytes[index] range:NSMakeRange(0, keySize)];
-    index += keySize;
+    [value getBytes:&output[outputIndex] range:NSMakeRange(start, length - start)];
+    outputIndex += length - start;
 
-    bytes[index++] = 0x02;            // type tag - integer
-
-    // Ensure the s value is encoded as positive
-    if (data[keySize] >= 0x80) {
-        bytes[index++] = 1 + keySize; // length
-        bytes[index++] = 0x00;
-    } else {        
-        bytes[index++] = keySize;     // length
-    }
-
-    // encode the s value
-    [signature getBytes:&bytes[index] range:NSMakeRange(keySize, keySize)];
-    index += keySize;
-
-    // now we know the final size
-    bytes[1] = index - 2; 
-    NSLog(@"Index: %d", index);
-
-    return [NSData dataWithBytes:bytes length:index];
+    return [NSData dataWithBytes:output length:outputIndex];
 }
+
+NSData *derEncodeSignature(NSData *signature) {
+
+    int length = [signature length];
+    if (length % 2) { return nil; }
+
+    NSData *rValue = derEncodeInteger([signature subdataWithRange:NSMakeRange(0, length / 2)]);
+    NSData *sValue = derEncodeInteger([signature subdataWithRange:NSMakeRange(length / 2, length / 2)]);
+
+    // Begin with the sequence tag and sequence length
+    unsigned char header[2];
+    header[0] = 0x30;
+    header[1] = [rValue length] + [sValue length];
+
+    // This requires a long definite octet stream (signatures aren't this long)
+    if (header[1] >= 0x80) { return nil; }
+
+    NSMutableData *encoded = [NSMutableData dataWithBytes:header length:2];
+    [encoded appendData:rValue];
+    [encoded appendData:sValue];
+
+    return [encoded copy];
+}
+
+
+NSRange derDecodeSequence(const unsigned char *bytes, int length, int index) {
+    NSRange result;
+    result.location = NSNotFound;
+
+    // Make sure we are long enough and have a sequence
+    if (length - index > 2 && bytes[index] == 0x30) {
+
+        // Make sure the input buffer is large enough
+        int sequenceLength = bytes[index + 1];
+        if (index + 2 + sequenceLength <= length) {
+            result.location = index + 2;
+            result.length = sequenceLength;
+        }
+    }
+
+    return result;
+}
+
+NSRange derDecodeInteger(const unsigned char *bytes, int length, int index) {
+    NSRange result;
+    result.location = NSNotFound;
+
+    // Make sure we are long enough and have an integer
+    if (length - index > 3 && bytes[index] == 0x02) {
+
+        // Make sure the input buffer is large enough
+        int integerLength = bytes[index + 1];
+        if (index + 2 + integerLength <= length) {
+
+            // Strip any leading zero, used to preserve sign
+            if (bytes[index + 2] == 0x00) {
+                result.location = index + 3;
+                result.length = integerLength - 1;
+
+            } else {
+                result.location = index + 2;
+                result.length = integerLength;
+            }
+        }
+    }
+
+    return result;
+}
+
+NSData *derDecodeSignature(NSData *der, int keySize) {
+    NSInteger length = [der length];
+    const unsigned char *data = [der bytes];
+
+    // Make sure we have a sequence
+    NSRange sequence = derDecodeSequence(data, length, 0);
+    if (sequence.location == NSNotFound) { return nil; }
+
+    // Extract the r value (first item)
+    NSRange rValue = derDecodeInteger(data, length, sequence.location);
+    if (rValue.location == NSNotFound || rValue.length > keySize) { return nil; }
+
+    // Extract the s value (second item)
+    int sStart = rValue.location + rValue.length;
+    NSRange sValue = derDecodeInteger(data, length, sStart);
+    if (sValue.location == NSNotFound || sValue.length > keySize) { return nil; }
+
+    // Create an empty array with 0's
+    unsigned char output[2 * keySize];
+    bzero(output, 2 * keySize);
+
+    // Copy the r and s value in, right aligned to zero adding
+    [der getBytes:&output[keySize - rValue.length] range:NSMakeRange(rValue.location, rValue.length)];
+    [der getBytes:&output[2 * keySize - sValue.length] range:NSMakeRange(sValue.location, sValue.length)];
+
+    return [NSData dataWithBytes:output length:2 * keySize];
+}
+
 
 @implementation GMEllipticCurveCrypto (hash)
 
 - (BOOL)hashSHA256AndVerifySignature:(NSData *)signature forData:(NSData *)data {
     int bytes = self.bits / 8;
-    
+
     if (bytes > CC_SHA256_DIGEST_LENGTH) {
       NSLog(@"ERROR: SHA256 hash is too short for curve");
       return NO;
@@ -134,19 +205,37 @@ NSData *derEncodeSignature(NSData* signature) {
     return [self signatureForHash:[NSData dataWithBytes:hash length:bytes]];
 }
 
+
 - (NSData*)encodedSignatureForHash: (NSData*)hash {
     NSData *signature = [self signatureForHash:hash];
-    return derEncodeSignature(signature);    
+    return derEncodeSignature(signature);
 }
 
 - (NSData*)hashSHA256AndSignDataEncoded: (NSData*)data {
     NSData *signature = [self hashSHA256AndSignData:data];
-    return derEncodeSignature(signature);    
+    return derEncodeSignature(signature);
 }
 
 - (NSData*)hashSHA384AndSignDataEncoded: (NSData*)data {
     NSData *signature = [self hashSHA384AndSignData:data];
-    return derEncodeSignature(signature);    
+    return derEncodeSignature(signature);
 }
+
+
+- (BOOL)verifyEncodedSignature: (NSData*)encodedSignature forHash: (NSData*)hash {
+    NSData *signature = derDecodeSignature(encodedSignature, self.bits / 8);
+    return [self verifySignature:signature forHash:hash];
+}
+
+- (BOOL)hashSHA256AndVerifyEncodedSignature: (NSData*)encodedSignature forData: (NSData*)data {
+    NSData *signature = derDecodeSignature(encodedSignature, self.bits / 8);
+    return [self hashSHA256AndVerifySignature:signature forData:data];
+}
+
+- (BOOL)hashSHA384AndVerifyEncodedSignature: (NSData*)encodedSignature forData: (NSData*)data {
+    NSData *signature = derDecodeSignature(encodedSignature, self.bits / 8);
+    return [self hashSHA384AndVerifySignature:signature forData:data];
+}
+
 
 @end
