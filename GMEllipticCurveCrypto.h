@@ -100,18 +100,29 @@ typedef enum GMEllipticCurve {
 @property (nonatomic, readonly) NSString *name;
 
 /**
- *  The public key for an elliptic curve is provided as a compressed point.
+ *  Determines whether the public key will be compressed or uncompressed.
+ *
+ *  It is updated when a public key is assigned and can be changed anytime
+ *  to select what the publicKey property emits.
  *
  *  A compressed point stores only the x co-ordinate of the point as well as
  *  a leading byte to indicate the parity of the y co-ordinate, which can then
  *  be computed from x.
  *
- * A public key's length is ((curve_bits / 8) + 1) bytes.
+ *  By default, keys are compressed.
+ */
+@property (nonatomic, assign) BOOL compressedPublicKey;
+
+/**
+ *  The public key for an elliptic curve.
+ *
+ *  A compressed public key's length is ((curve_bits / 8) + 1) bytes.
+ *  An uncompressed public key's length is (2 * (curve_bits / 8) + 1) bytes.
  */
 @property (nonatomic, strong) NSData *publicKey;
 
 /**
- *  The public key (compressed point) encoded in base64
+ *  The public key encoded in base64
  */
 @property (nonatomic, strong) NSString *publicKeyBase64;
 

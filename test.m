@@ -22,7 +22,7 @@ int main(int argc, const char* argv[]) {
     // Select the curve to test and some known correct test data
     GMEllipticCurve curve = GMEllipticCurveNone;
     NSString *curveName = nil;
-    NSString *alicePublicKey, *alicePrivateKey, *bobPublicKey, *bobPrivateKey;
+    NSString *alicePublicKey, *aliceUncompressedPublicKey, *alicePrivateKey, *bobPublicKey, *bobPrivateKey;
     
     // Known correct signatures
     char *testSignatureBytes;
@@ -38,6 +38,7 @@ int main(int argc, const char* argv[]) {
         curveName = @"GMEllipticCurveSecp128r1";
 
         alicePublicKey = @"A/DSn7VEbavr9BNXdkc9YaM=";
+        aliceUncompressedPublicKey = @"BPDSn7VEbavr9BNXdkc9YaO5G8Z+WQrkPDsfAuEMN2Bj";
         alicePrivateKey = @"LRtdqpOXEmdZuG+kHdl7iw==";
         bobPublicKey = @"Atogpx1pGlak5vVpOP6pwYw=";
         bobPrivateKey = @"B3rloJxb2h1uX+Cin/0Big==";
@@ -51,6 +52,7 @@ int main(int argc, const char* argv[]) {
         curveName = @"GMEllipticCurveSecp192r1";
 
         alicePublicKey = @"AjKrRgg7c5t3JduLDuLL3n9Eap/JHo+32g==";
+        aliceUncompressedPublicKey = @"BDKrRgg7c5t3JduLDuLL3n9Eap/JHo+32i0q7Dr9+yeILhMirgHnqQIRAKC2j1gBqA==";
         alicePrivateKey = @"bOr7KLf1mrqh3ZW1Zmu2rTwmv8GtjzOs";
         bobPublicKey = @"A5WjHAPDpwdMn0CuCqW03gksQ29nO9OuTw==";
         bobPrivateKey = @"3zA52Irsxvm549QMeHaJ1K6arJz4XGrn";
@@ -64,6 +66,7 @@ int main(int argc, const char* argv[]) {
         curveName = @"GMEllipticCurveSecp256r1";
 
         alicePublicKey = @"Aq4Qk0tQwU3zSfStH0ZTMKzC6ZfF3PBEqoGLWwJMYQVz";
+        aliceUncompressedPublicKey = @"BK4Qk0tQwU3zSfStH0ZTMKzC6ZfF3PBEqoGLWwJMYQVzvncvr8fv+S6POJ96oLZn0l4YS/OpqB19Of+l1qxwO9Q=";
         alicePrivateKey = @"UhCeQEsqYcby7UfjKWLxGePlag/RUTIAwYypF0K3ERU=";
         bobPublicKey = @"ApneAMFPGDIS6bXR7qOca7huHsiQD5grT1X+CBB1UX82";
         bobPrivateKey = @"7mKV1nAZ6m61UMuGAeJ+eBYuAY4jfrnDEOf9K1aQixk=";
@@ -77,6 +80,7 @@ int main(int argc, const char* argv[]) {
         curveName = @"GMEllipticCurveSecp384r1";
 
         alicePublicKey = @"Amp3NAD5A3Eyg2TB5xF6GnKKFN1mreXkEGBNW+BO9jCx/rPgho7cwgTqZOE950TDeg==";
+        aliceUncompressedPublicKey = @"BGp3NAD5A3Eyg2TB5xF6GnKKFN1mreXkEGBNW+BO9jCx/rPgho7cwgTqZOE950TDemKqgjvi5Ozs6CHq/+1VLBm9lt+XKRfeeUJpoSxQmINYv1yFcBmWHPeNU2b2dGW2IA==";
         alicePrivateKey = @"238XF1UdIU+UATgDvhlhYmTZKTrdtCXEkfSGscowTCHNjRWY7QPOJxW1CzpxJcqM";
         bobPublicKey = @"AnpyZJlvppMp9JazUxONY83RIsn+sv/XqWPCcfRb1XJYYoUYGhU/udPhvwjJvkDnLA==";
         bobPrivateKey = @"42ly4+r5t9cmUHxN6mK0cM2IlsNZePumSO/1G4W8UOYsnExiUoIAM33gkPBZGXcJ";
@@ -112,6 +116,30 @@ int main(int argc, const char* argv[]) {
     valid = [crypto verifySignature:signature forHash:messageHash];
     NSLog(@"    Verified: %@", valid ? @"YES": @"NO");
     NSCAssert(valid, @"signatureForHash: or verifySignature:forHash: failed; Signature did not validate");
+
+
+
+    NSLog(@"  Test ECC decompressing public keys");
+
+    // Test with Alice's keys
+    crypto = [GMEllipticCurveCrypto cryptoForKeyBase64:alicePublicKey];
+    NSCAssert(crypto.compressedPublicKey, @"compressed key was not identified as compressed");
+    NSLog(@"    Compressed: %@", crypto.publicKeyBase64);
+    crypto.compressedPublicKey = NO;
+    NSLog(@"    Uncompressed: %@", crypto.publicKeyBase64);
+    NSCAssert([crypto.publicKeyBase64 isEqual:aliceUncompressedPublicKey], @"compressed key was not correctly decompressed");
+
+
+
+    NSLog(@"  Test ECC compressing public keys");
+
+    // Test with Alice's keys
+    crypto = [GMEllipticCurveCrypto cryptoForKeyBase64:aliceUncompressedPublicKey];
+    NSCAssert(!crypto.compressedPublicKey, @"decompressed key was not identified as decompressed");
+    NSLog(@"    Decompressed: %@", crypto.publicKeyBase64);
+    crypto.compressedPublicKey = YES;
+    NSLog(@"    Compressed: %@", crypto.publicKeyBase64);
+    NSCAssert([crypto.publicKeyBase64 isEqual:alicePublicKey], @"uncompressed key was not correctly compressed");
 
 
 

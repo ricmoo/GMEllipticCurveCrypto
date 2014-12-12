@@ -1354,6 +1354,7 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 @interface GMEllipticCurveCrypto () {
     int _bytes, _numDigits;
     uint64_t *_curve_p, *_curve_b, *_curve_Gx, *_curve_Gy, *_curve_n;
+    NSData *_publicKey;
 }
 
 @end
@@ -1369,18 +1370,42 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
     
 }
 
-
 + (GMEllipticCurve)curveForKey:(NSData *)privateOrPublicKey {
-    switch ([privateOrPublicKey length]) {
-        case 16: case 17:
+
+    NSInteger length = [privateOrPublicKey length];
+
+    // We need at least 1 byte
+    if (length == 0) {
+        return GMEllipticCurveNone;
+    }
+
+    const uint8_t *bytes = [privateOrPublicKey bytes];
+
+    // Odd-length, therefore a public key
+    if (length % 2) {
+        switch (bytes[0]) {
+            case 0x04:
+                length = (length - 1) / 2;
+                break;
+            case 0x02: case 0x03:
+                length--;
+                break;
+            default:
+                return GMEllipticCurveNone;
+        }
+    }
+
+    switch (length) {
+        case 16:
             return GMEllipticCurveSecp128r1;
-        case 24: case 25:
+        case 24:
             return GMEllipticCurveSecp192r1;
-        case 32: case 33:
+        case 32:
             return GMEllipticCurveSecp256r1;
-        case 48: case 49:
+        case 48:
             return GMEllipticCurveSecp384r1;
     }
+
     return GMEllipticCurveNone;
 }
 
@@ -1413,6 +1438,8 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 - (id)initWithCurve:(GMEllipticCurve)curve {
     self = [super init];
     if (self) {
+        _compressedPublicKey = YES;
+
         _bits = curve;
         _bytes = _bits / 8;
         _numDigits = _bytes / 8;
@@ -1606,6 +1633,89 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
     return [NSData dataWithBytes:l_public length:_bytes + 1];
 }
 
+- (NSData*)compressPublicKey: (NSData*)publicKey {
+
+    NSInteger length = [publicKey length];
+
+    if (length == 0) {
+        return nil;
+    }
+
+    const uint8_t *bytes = [publicKey bytes];
+
+    switch (bytes[0]) {
+
+        // Already compressed
+        case 0x02: case 0x03:
+            if (length != (1 + _bytes)) {
+                return nil;
+            }
+
+            return publicKey;
+
+        // Compress!
+        case 0x04: {
+            if (length != (1 + 2 * _bytes)) {
+                return nil;
+            }
+
+            // Get the (x, y) point from the public key
+            uint64_t l_publicX[_numDigits], l_publicY[_numDigits];
+            ecc_bytes2native(l_publicX, &bytes[1], _numDigits);
+            ecc_bytes2native(l_publicY, &bytes[1 + _bytes], _numDigits);
+
+            // And compress
+            uint8_t l_public[_bytes + 1];
+            ecc_native2bytes(l_public + 1, l_publicX, _numDigits);
+            l_public[0] = 2 + (l_publicY[0] & 0x01);
+
+            return [NSData dataWithBytes:l_public length:_bytes + 1];
+        }
+    }
+
+    return nil;
+}
+
+- (NSData*)decompressPublicKey: (NSData*)publicKey {
+    NSInteger length = [publicKey length];
+
+    if (length == 0) {
+        return nil;
+    }
+
+    const uint8_t *bytes = [publicKey bytes];
+
+    switch (bytes[0]) {
+
+        // Already uncompressed
+        case 0x04:
+            if (length != (1 + 2 * _bytes)) {
+                return nil;
+            }
+            return publicKey;
+
+        case 0x02: case 0x03: {
+            if (length != (1 + _bytes)) {
+                return nil;
+            }
+
+            // Decompress to get the (x, y) point
+            uint64_t l_publicX[_numDigits], l_publicY[_numDigits];
+            ecc_point_decompress(l_publicX, l_publicY, [_publicKey bytes], _numDigits, _curve_p, _curve_b);
+
+            // Compose the public key (0x04 + x + y)
+            uint8_t l_public[2 * _bytes + 1];
+            l_public[0] = 0x04;
+            ecc_native2bytes(l_public + 1, l_publicX, _numDigits);
+            ecc_native2bytes(l_public + 1 + _bytes, l_publicY, _numDigits);
+
+            return [NSData dataWithBytes:l_public length:2 * _bytes + 1];
+        }
+    }
+
+    return nil;
+}
+
 - (NSString*)privateKeyBase64 {
     return [_privateKey base64EncodedStringWithOptions:0];
 }
@@ -1618,13 +1728,12 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
     }
 
     NSData *checkPublicKey = [self publicKeyForPrivateKey:privateKey];
-    NSLog(@"FOO: %@ %@ %@", checkPublicKey, _publicKey, privateKey);
     if (_publicKey && ![_publicKey isEqual:checkPublicKey]) {
         [NSException raise:@"Key mismatch" format:@"Private key %@ does not match public key %@", privateKey, _publicKey];
     }
     
-    _privateKey = privateKey;
     _publicKey = checkPublicKey;
+    _privateKey = privateKey;
 }
 
 
@@ -1634,22 +1743,35 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 
 
 - (NSString*)publicKeyBase64 {
-    return [_publicKey base64EncodedStringWithOptions:0];
+    return [self.publicKey base64EncodedStringWithOptions:0];
 }
 
+
+- (NSData*)publicKey {
+    if (_compressedPublicKey) {
+        return _publicKey;
+    }
+    return [self decompressPublicKey:_publicKey];
+}
 
 - (void)setPublicKey: (NSData*)publicKey {
     int keyBits = [GMEllipticCurveCrypto curveForKey:publicKey];
     if (keyBits != _bits) {
-      [NSException raise:@"Invalid Key" format:@"Public key %@ is %d bits; curve is %d bits", publicKey, keyBits, _bits];
+        [NSException raise:@"Invalid Key" format:@"Public key %@ is %d bits; curve is %d bits", publicKey, keyBits, _bits];
     }
 
-    if (_privateKey) {
-        NSData *checkPublicKey = [self publicKeyForPrivateKey:_privateKey];
-        if (![publicKey isEqual:checkPublicKey]) {
-            [NSException raise:@"Key mismatch" format:@"Private key %@ does not match public key %@", _privateKey, publicKey];
-        }
+    const uint8_t *bytes = [publicKey bytes];
+    BOOL compressedPublicKey = (bytes[0] != (uint8_t)0x04);
+
+    // Ensure the key is compressed (we only store compressed keys internally)
+    publicKey = [self compressPublicKey:publicKey];
+
+    // If the private key has already been set, and it doesn't match, complain
+    if (_privateKey && ![publicKey isEqual:_publicKey]) {
+        [NSException raise:@"Key mismatch" format:@"Private key %@ does not match public key %@", _privateKey, publicKey];
     }
+
+    _compressedPublicKey = compressedPublicKey;
     _publicKey = publicKey;
 }
 
