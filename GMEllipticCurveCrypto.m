@@ -1583,6 +1583,29 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 }
 
 
+- (NSData*)publicKeyForPrivateKey: (NSData*)privateKey {
+
+    // Prepare the private key
+    uint8_t l_privateBytes[_bytes];
+    if ([privateKey length] != _bytes) {
+        [NSException raise:@"Invalid Key" format:@"Private key %@ is invalid", privateKey];
+    }
+    [privateKey getBytes:&l_privateBytes length:[privateKey length]];
+    uint64_t l_private[_numDigits];
+    ecc_bytes2native(l_private, l_privateBytes, _numDigits);
+
+    // The (x, y) public point
+    uint64_t l_publicX[_numDigits], l_publicY[_numDigits];
+    EccPoint_mult(l_publicX, l_publicY, _curve_Gx, _curve_Gy, l_private, NULL, vli_numBits(l_private, _numDigits), _numDigits, _curve_p);
+
+    // Now compress the point into our public key
+    uint8_t l_public[_bytes + 1];
+    ecc_native2bytes(l_public + 1, l_publicX, _numDigits);
+    l_public[0] = 2 + (l_publicY[0] & 0x01);
+
+    return [NSData dataWithBytes:l_public length:_bytes + 1];
+}
+
 - (NSString*)privateKeyBase64 {
     return [_privateKey base64EncodedStringWithOptions:0];
 }
@@ -1591,10 +1614,17 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
 - (void)setPrivateKey: (NSData*)privateKey {
     int keyBits = [GMEllipticCurveCrypto curveForKey:privateKey];
     if (keyBits != _bits) {
-      [NSException raise:@"Invalid Key" format:@"Private key %@ is %d bits; curve is %d bits", privateKey, keyBits, _bits];
+        [NSException raise:@"Invalid Key" format:@"Private key %@ is %d bits; curve is %d bits", privateKey, keyBits, _bits];
+    }
+
+    NSData *checkPublicKey = [self publicKeyForPrivateKey:privateKey];
+    NSLog(@"FOO: %@ %@ %@", checkPublicKey, _publicKey, privateKey);
+    if (_publicKey && ![_publicKey isEqual:checkPublicKey]) {
+        [NSException raise:@"Key mismatch" format:@"Private key %@ does not match public key %@", privateKey, _publicKey];
     }
     
     _privateKey = privateKey;
+    _publicKey = checkPublicKey;
 }
 
 
@@ -1614,6 +1644,12 @@ static uint64_t Curve_n_384[6] = {0xECEC196ACCC52973, 0x581A0DB248B0A77A, 0xC763
       [NSException raise:@"Invalid Key" format:@"Public key %@ is %d bits; curve is %d bits", publicKey, keyBits, _bits];
     }
 
+    if (_privateKey) {
+        NSData *checkPublicKey = [self publicKeyForPrivateKey:_privateKey];
+        if (![publicKey isEqual:checkPublicKey]) {
+            [NSException raise:@"Key mismatch" format:@"Private key %@ does not match public key %@", _privateKey, publicKey];
+        }
+    }
     _publicKey = publicKey;
 }
 
