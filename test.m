@@ -4,9 +4,12 @@
 
 #import "GMEllipticCurveCrypto+hash.h"
 
+NSData *derEncodeSignature(NSData* signature);
+NSData *derDecodeSignature(NSData *der, int keySize);
+
 int main(int argc, const char* argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
-  
+
   // An array to use as a mock hash
   char bytes[] = { 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r' };
 
@@ -23,10 +26,10 @@ int main(int argc, const char* argv[]) {
     GMEllipticCurve curve = GMEllipticCurveNone;
     NSString *curveName = nil;
     NSString *alicePublicKey, *aliceUncompressedPublicKey, *alicePrivateKey, *bobPublicKey, *bobPrivateKey;
-    
+
     // Known correct signatures
     char *testSignatureBytes;
-    
+
     // Variables we use
     GMEllipticCurveCrypto *crypto;
     NSData *messageHash, *signature;
@@ -42,11 +45,11 @@ int main(int argc, const char* argv[]) {
         alicePrivateKey = @"LRtdqpOXEmdZuG+kHdl7iw==";
         bobPublicKey = @"Atogpx1pGlak5vVpOP6pwYw=";
         bobPrivateKey = @"B3rloJxb2h1uX+Cin/0Big==";
-        
+
         testSignatureBytes = testSignatureBytes128;
-        
+
         break;
-        
+
       case 1:
         curve = GMEllipticCurveSecp192r1;
         curveName = @"GMEllipticCurveSecp192r1";
@@ -56,11 +59,11 @@ int main(int argc, const char* argv[]) {
         alicePrivateKey = @"bOr7KLf1mrqh3ZW1Zmu2rTwmv8GtjzOs";
         bobPublicKey = @"A5WjHAPDpwdMn0CuCqW03gksQ29nO9OuTw==";
         bobPrivateKey = @"3zA52Irsxvm549QMeHaJ1K6arJz4XGrn";
-        
+
         testSignatureBytes = testSignatureBytes192;
-        
+
         break;
-        
+
       case 2:
         curve = GMEllipticCurveSecp256r1;
         curveName = @"GMEllipticCurveSecp256r1";
@@ -70,11 +73,11 @@ int main(int argc, const char* argv[]) {
         alicePrivateKey = @"UhCeQEsqYcby7UfjKWLxGePlag/RUTIAwYypF0K3ERU=";
         bobPublicKey = @"ApneAMFPGDIS6bXR7qOca7huHsiQD5grT1X+CBB1UX82";
         bobPrivateKey = @"7mKV1nAZ6m61UMuGAeJ+eBYuAY4jfrnDEOf9K1aQixk=";
-        
+
         testSignatureBytes = testSignatureBytes256;
-        
+
         break;
-        
+
       case 3:
         curve = GMEllipticCurveSecp384r1;
         curveName = @"GMEllipticCurveSecp384r1";
@@ -84,25 +87,23 @@ int main(int argc, const char* argv[]) {
         alicePrivateKey = @"238XF1UdIU+UATgDvhlhYmTZKTrdtCXEkfSGscowTCHNjRWY7QPOJxW1CzpxJcqM";
         bobPublicKey = @"AnpyZJlvppMp9JazUxONY83RIsn+sv/XqWPCcfRb1XJYYoUYGhU/udPhvwjJvkDnLA==";
         bobPrivateKey = @"42ly4+r5t9cmUHxN6mK0cM2IlsNZePumSO/1G4W8UOYsnExiUoIAM33gkPBZGXcJ";
-        
+
         testSignatureBytes = testSignatureBytes384;
-        
-        break;      
+
+        break;
     }
-    
-    
+
     NSLog(@"Testing: %@", curveName);
-    
-    
+
     // Generate a key pair
     NSLog(@"  Generate Key Pair");
-    
+
     crypto = [GMEllipticCurveCrypto generateKeyPairForCurve:curve];
     NSLog(@"    Public Key:  %@", crypto.publicKeyBase64);
     NSLog(@"    Private Key: %@", crypto.privateKeyBase64);
 
 
-        
+
     NSLog(@"  Test ECDSA signing and verification with generated keys");
 
     // We just use an array of "helloworld" repeated to be the length required for testing
@@ -111,7 +112,7 @@ int main(int argc, const char* argv[]) {
     // Calculate the signature
     signature = [crypto signatureForHash:messageHash];
     NSLog(@"    Signature: %@", signature);
-    
+
     // Validate the signature
     valid = [crypto verifySignature:signature forHash:messageHash];
     NSLog(@"    Verified: %@", valid ? @"YES": @"NO");
@@ -170,7 +171,35 @@ int main(int argc, const char* argv[]) {
     NSCAssert(valid, @"verifySignature:forHash: failed; Signature did not validate");
 
 
-    
+
+    NSLog(@"  Test ECDSA DER signature and verification for known keys");
+
+    // Test with Alice's keys
+    crypto = [GMEllipticCurveCrypto cryptoForKeyBase64:alicePrivateKey];
+    signature = [crypto encodedSignatureForHash:messageHash];
+    NSLog(@"    Encoded Signature: %@", signature);
+
+    // Validate the signature
+    crypto = [GMEllipticCurveCrypto cryptoForKeyBase64:alicePublicKey];
+    valid = [crypto verifyEncodedSignature:signature forHash:messageHash];
+    NSLog(@"    Verified: %@", valid ? @"YES": @"NO");
+    NSCAssert(valid, @"signatureForHash: or verifySignature:forHash: failed; Signature did not validate");
+
+
+
+    NSLog(@"  Test ECDSA DER verification for known keys and signature");
+
+    // A correct signature
+    NSData *encodedCorrectSignature = derEncodeSignature([NSData dataWithBytes:testSignatureBytes length:2 * crypto.bits / 8]);
+
+    // Validate the signature
+    crypto = [GMEllipticCurveCrypto cryptoForKeyBase64:alicePublicKey];
+    valid = [crypto verifyEncodedSignature:encodedCorrectSignature forHash:messageHash];
+    NSLog(@"    Verified: %@", valid ? @"YES": @"NO");
+    NSCAssert(valid, @"verifySignature:forHash: failed; Signature did not validate");
+
+
+
     NSLog(@"  Test ECDH shared secret");
 
     // Alice's shared secret
@@ -192,12 +221,12 @@ int main(int argc, const char* argv[]) {
     NSLog(@"  Test ECDSA signature and verification with hash category");
 
     NSData *message = [@"Hello World" dataUsingEncoding:NSUTF8StringEncoding];
-    
+
     // Set up a crypto using Alice's keys
     crypto = [GMEllipticCurveCrypto cryptoForCurve:curve];
     crypto.publicKeyBase64 = alicePublicKey;
     crypto.privateKeyBase64 = alicePrivateKey;
-    
+
     // Try out the functions
     if (crypto.bits <= 256) {
       signature = [crypto hashSHA256AndSignData:message];
@@ -211,19 +240,19 @@ int main(int argc, const char* argv[]) {
       NSLog(@"    Verified: %@", valid ? @"YES": @"NO");
       NSCAssert(valid, @"hashSHA384AndSignData: or hashSHA384AndVerifySignature:forData: failed; Signature did not validate");
     }
-    
+
   }
-  
+
   // Test passing in a key of the wrong length
   GMEllipticCurveCrypto *crypto = [GMEllipticCurveCrypto cryptoForCurve:GMEllipticCurveSecp256r1];
-  
+
   @try {
       crypto.publicKeyBase64 = @"Aua4DjC1U8HFSHNAsXt5FgQ=";
       NSCAssert(YES, @"Invalid public key length did not throw an exception");
   } @catch (NSException *exception) {
       NSLog(@"  Invalid public key ignored");
   }
-  
+
   @try {
       crypto.privateKeyBase64 = @"L2zVnuI3hVKXg0AvAFcjEA==";
       NSCAssert(YES, @"Invalid private key length did not throw an exception");
