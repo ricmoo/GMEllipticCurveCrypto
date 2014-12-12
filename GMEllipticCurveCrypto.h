@@ -89,15 +89,44 @@ typedef enum GMEllipticCurve {
 + (id)cryptoForCurve: (GMEllipticCurve)curve;
 - (id)initWithCurve: (GMEllipticCurve)curve;
 
-
+/**
+ *  The length of the curve in bits.
+ */
 @property (nonatomic, readonly) int bits;
+
+/**
+ *  The common name given to the curve (e.g. secp192r1).
+ */
 @property (nonatomic, readonly) NSString *name;
 
-
+/**
+ *  The public key for an elliptic curve is provided as a compressed point.
+ *
+ *  A compressed point stores only the x co-ordinate of the point as well as
+ *  a leading byte to indicate the parity of the y co-ordinate, which can then
+ *  be computed from x.
+ *
+ * A public key's length is ((curve_bits / 8) + 1) bytes.
+ */
 @property (nonatomic, strong) NSData *publicKey;
+
+/**
+ *  The public key (compressed point) encoded in base64
+ */
 @property (nonatomic, strong) NSString *publicKeyBase64;
 
+/**
+ *  The private key for an elliptic curve.
+ *
+ *  This is also sometimes referred to as the secret exponent.
+ *
+ *  A private key's length is (crypto_bits / 8) bytes.
+ */
 @property (nonatomic, strong) NSData *privateKey;
+
+/**
+ *  The private key encoded in base64
+ */
 @property (nonatomic, strong) NSString *privateKeyBase64;
 
 
