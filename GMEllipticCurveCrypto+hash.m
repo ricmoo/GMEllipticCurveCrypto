@@ -34,6 +34,59 @@
 
 #import <CommonCrypto/CommonDigest.h>
 
+NSData *derEncodeSignature(NSData* signature) {
+    NSInteger length = [signature length];
+    
+    if (length % 2) {
+        return nil;
+    }
+
+    int keySize = length / 2;
+
+    const unsigned char *data = [signature bytes];
+
+    // Construct the DER encoded structure    
+    unsigned char bytes[2 * keySize + 8];
+
+    bytes[0] = 0x30;                  // type tag - sequence
+    // bytes[1] will be filled in later
+    bytes[2] = 0x02;                  // type tag - integer
+
+    int index = 3;
+
+    // Ensure the r value is encoded as positive
+    if (data[0] >= 0x80) {
+        bytes[index++] = 1 + keySize;       // length
+        bytes[index++] = 0x00;
+    } else {
+        bytes[index++] = keySize;           // length
+    }
+
+    // encode the r value
+    [signature getBytes:&bytes[index] range:NSMakeRange(0, keySize)];
+    index += keySize;
+
+    bytes[index++] = 0x02;            // type tag - integer
+
+    // Ensure the s value is encoded as positive
+    if (data[keySize] >= 0x80) {
+        bytes[index++] = 1 + keySize; // length
+        bytes[index++] = 0x00;
+    } else {        
+        bytes[index++] = keySize;     // length
+    }
+
+    // encode the s value
+    [signature getBytes:&bytes[index] range:NSMakeRange(keySize, keySize)];
+    index += keySize;
+
+    // now we know the final size
+    bytes[1] = index - 2; 
+    NSLog(@"Index: %d", index);
+
+    return [NSData dataWithBytes:bytes length:index];
+}
+
 @implementation GMEllipticCurveCrypto (hash)
 
 - (BOOL)hashSHA256AndVerifySignature:(NSData *)signature forData:(NSData *)data {
@@ -79,6 +132,21 @@
     unsigned char hash[CC_SHA384_DIGEST_LENGTH];
     CC_SHA384([data bytes], (int)[data length], hash);
     return [self signatureForHash:[NSData dataWithBytes:hash length:bytes]];
+}
+
+- (NSData*)encodedSignatureForHash: (NSData*)hash {
+    NSData *signature = [self signatureForHash:hash];
+    return derEncodeSignature(signature);    
+}
+
+- (NSData*)hashSHA256AndSignDataEncoded: (NSData*)data {
+    NSData *signature = [self hashSHA256AndSignData:data];
+    return derEncodeSignature(signature);    
+}
+
+- (NSData*)hashSHA384AndSignDataEncoded: (NSData*)data {
+    NSData *signature = [self hashSHA384AndSignData:data];
+    return derEncodeSignature(signature);    
 }
 
 @end

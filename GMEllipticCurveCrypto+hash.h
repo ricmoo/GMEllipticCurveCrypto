@@ -33,6 +33,8 @@
 
 #import "GMEllipticCurveCrypto.h"
 
+NSData *derEncodeSignature(NSData* signature);
+
 @interface GMEllipticCurveCrypto (hash)
 
 - (NSData*)hashSHA256AndSignData: (NSData*)data;
@@ -40,6 +42,14 @@
 
 - (NSData*)hashSHA384AndSignData: (NSData*)data;
 - (BOOL)hashSHA384AndVerifySignature: (NSData*)signature forData: (NSData*)data;
+
+- (NSData*)encodedSignatureForHash: (NSData*)hash;
+
+- (NSData*)hashSHA256AndSignDataEncoded: (NSData*)data;
+//- (BOOL)hashSHA256AndVerifyEncodedSignature: (NSData*)encodedSignature forData: (NSData*)data;
+
+- (NSData*)hashSHA384AndSignDataEncoded: (NSData*)data;
+//- (BOOL)hashSHA384AndVerifyEncodedSignature: (NSData*)encodedSignature forData: (NSData*)data;
 
 @end
 

@@ -6,6 +6,11 @@
 
 int main(int argc, const char* argv[]) {
   NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+
+  NSData *tt = [[NSData alloc] initWithBase64EncodedString:@"mD51ocFpDgarSG4MvQNZGbH3H9feM1WQXT0J6kYYYkZLSolSWsrIpijuFQvkhOZ1" options:0];
+  
+  NSLog(@"FOO: %@", derEncodeSignature(tt));
+  return 0;
   
   // An array to use as a mock hash
   char bytes[] = { 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r', 'l', 'd', 'h', 'e', 'l', 'l', 'o', 'w', 'o', 'r' };
